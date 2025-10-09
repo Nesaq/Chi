@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -8,6 +9,52 @@ import (
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+}
+
+type chirpRequest struct {
+	Body string `json:"body"`
+}
+
+type chirpResponse struct {
+	Valid bool `json:"valid"`
+}
+
+type errorResponse struct {
+	Error string `json:"error"`
+}
+
+
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Write(data)
+}
+
+
+func respondWithError(w http.ResponseWriter, code int, msg string) {
+	respondWithJSON(w, code, errorResponse{Error: msg})
+
+}
+
+func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+	var req chirpRequest
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&req)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+		return
+	}
+	if len(req.Body) > 140 {
+		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, chirpResponse{Valid: true}) 
 }
 
 
@@ -50,6 +97,7 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
+	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handleAdminMetrics)
