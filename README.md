@@ -1,15 +1,17 @@
                     HTTP Запрос
                          ↓
                     ServeMux
-                   /        \
-                  /          \
-            /api/*         /app/*
-                |              |
-        API эндпоинты    Статические файлы
-        /healthz         index.html
-        /metrics         assets/logo.png
-        /reset           style.css
-                |
-        middlewareMetricsInc
-                |
-        fileserverHits++
+                   /    |    \
+                  /     |     \
+            /api/    /admin/   /app/
+                |        |        |
+        Health Check  Admin UI  Website
+        (JSON)        (HTML)    (Files)
+                |        |        |
+                |        |   middlewareMetricsInc
+                |        |        ↓
+                |        |   fileserverHits++
+                |        |
+                |    handleAdminMetrics
+                |        ↓
+                |    HTML с счетчиком
