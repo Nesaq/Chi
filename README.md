@@ -1,13 +1,15 @@
                     HTTP Запрос
                          ↓
-                  Проверка метода
-                   /          \
-             Совпадает?     Нет → 405 Method Not Allowed
-                 Да
-                 ↓
-            ServeMux match
-            /      |      \
-           /       |       \
-    GET /healthz  GET /metrics  POST /reset  /app/*
-         ↓           ↓            ↓           ↓
-        OK        Hits: X      Store(0)   FileServer
+                    ServeMux
+                   /        \
+                  /          \
+            /api/*         /app/*
+                |              |
+        API эндпоинты    Статические файлы
+        /healthz         index.html
+        /metrics         assets/logo.png
+        /reset           style.css
+                |
+        middlewareMetricsInc
+                |
+        fileserverHits++
