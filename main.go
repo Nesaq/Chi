@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -16,7 +17,7 @@ type chirpRequest struct {
 }
 
 type chirpResponse struct {
-	Valid bool `json:"valid"`
+	CleanedBody string `json:"cleaned_body"`
 }
 
 type errorResponse struct {
@@ -43,6 +44,8 @@ func respondWithError(w http.ResponseWriter, code int, msg string) {
 }
 
 func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+	// defer r.Body.Close()
+
 	var req chirpRequest
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&req)
@@ -54,8 +57,26 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
-	respondWithJSON(w, http.StatusOK, chirpResponse{Valid: true}) 
+	cleanedText := cleanProfanity(req.Body)
+	respondWithJSON(w, http.StatusOK, chirpResponse{CleanedBody: cleanedText}) 
 }
+
+
+func cleanProfanity(text string) string {
+	badWords := map[string]bool{
+		"kerfuffle": true,
+		"sharbert":  true,
+		"fornax":    true,
+		}
+
+	words := strings.Split(text, " ")
+	for i, word := range words {
+		if badWords[strings.ToLower(word)] {
+			words[i] = "****"
+			} 
+		}
+		return strings.Join(words, " ")
+	}
 
 
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
