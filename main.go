@@ -1,5 +1,4 @@
 package main
-import _ "github.com/lib/pq"
 
 import (
 	"encoding/json"
@@ -7,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync/atomic"
+	 _ "github.com/lib/pq"
 )
 
 type apiConfig struct {
