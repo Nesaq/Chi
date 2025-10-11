@@ -1,16 +1,23 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
-	 _ "github.com/lib/pq"
+
+	"github.com/Nesaq/Chi/internal/database"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	DB *database.Queries
 }
 
 type chirpRequest struct {
@@ -107,8 +114,26 @@ func (cfg *apiConfig) handleAdminMetrics(w http.ResponseWriter, r *http.Request)
 
 
 func main() {
+	const filepathRoot = "."
+	const port = "8080"
+
+	godotenv.Load()
+
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		log.Fatal("DB_URL must be set")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("Error opening database: %s", err)
+	}
+	dbQueries := database.New(db)
+
+
 	apiCfg := &apiConfig{
 		fileserverHits: atomic.Int32{},
+		DB: dbQueries,
 	}
 
 	mux := http.NewServeMux()
@@ -126,8 +151,11 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", apiCfg.handleReset)
 
 	server := &http.Server{
-		Addr: ":8080",
+		Addr: ":" + port,
 		Handler: mux,
 	}
-	server.ListenAndServe()
+	// server.ListenAndServe() 
+
+	log.Printf("Serving on port: %s\n", port)
+	log.Fatal(server.ListenAndServe())
 }
