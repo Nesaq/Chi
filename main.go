@@ -24,19 +24,20 @@ type User struct {
 	Email string `json:"email"`
 }
 
+type Chirp struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	DB *database.Queries
 	Platform string
 }
 
-type chirpRequest struct {
-	Body string `json:"body"`
-}
-
-type chirpResponse struct {
-	CleanedBody string `json:"cleaned_body"`
-}
 
 type errorResponse struct {
 	Error string `json:"error"`
@@ -45,13 +46,13 @@ type errorResponse struct {
 
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
 	w.Write(data)
 }
 
@@ -61,22 +62,46 @@ func respondWithError(w http.ResponseWriter, code int, msg string) {
 
 }
 
-func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
-	// defer r.Body.Close()
 
-	var req chirpRequest
+func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Body string `json:"body"`
+		UserID uuid.UUID `json:"user_id"`
+	}
+
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(&req)
+	params := parameters{}
+	err := decoder.Decode(&params)
+
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters")
 		return
 	}
-	if len(req.Body) > 140 {
+
+	if len(params.Body) > 140 {
 		respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 		return
 	}
-	cleanedText := cleanProfanity(req.Body)
-	respondWithJSON(w, http.StatusOK, chirpResponse{CleanedBody: cleanedText}) 
+
+	cleanBody := cleanProfanity(params.Body)
+
+	chirp, err := cfg.DB.CreateChirp(r.Context(), database.CreateChirpParams{
+		Body: cleanBody,
+		UserID: params.UserID,
+	})
+
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create chirp")
+		return
+	}
+
+	respondWithJSON(w, http.StatusCreated, Chirp{
+		ID: chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserID:    chirp.UserID,
+	})
 }
 
 
@@ -204,7 +229,7 @@ func main() {
 		w.Write([]byte("OK"))
 	})
 
-	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
+	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
 	mux.HandleFunc("POST /api/users", apiCfg.handleCreateUser)
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 
