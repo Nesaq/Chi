@@ -48,7 +48,10 @@ type errorResponse struct {
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	data, err := json.Marshal(payload)
 	if err != nil {
+		log.Printf("Error marshaling JSON: %s", err)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"Internal server error"}`))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -64,6 +67,7 @@ func respondWithError(w http.ResponseWriter, code int, msg string) {
 
 
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	type parameters struct {
 		Body string `json:"body"`
 		UserID uuid.UUID `json:"user_id"`
@@ -105,6 +109,28 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 }
 
 
+func (cfg *apiConfig) handleGetAllChirps(w http.ResponseWriter, r *http.Request) {
+	chirps, err := cfg.DB.GetAllChirps(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirps")
+		return
+	}
+
+	chirpsResponse := []Chirp{}
+
+	for _, chirp := range chirps {
+		chirpsResponse = append(chirpsResponse, Chirp{
+			ID: chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body: chirp.Body,
+			UserID: chirp.UserID,
+		})
+	}
+	respondWithJSON(w, http.StatusOK, chirpsResponse)
+}
+
+
 func cleanProfanity(text string) string {
 	badWords := map[string]bool{
 		"kerfuffle": true,
@@ -123,6 +149,8 @@ func cleanProfanity(text string) string {
 
 
 func  (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	
 	type parameters struct {
 		Email string `json:"email"`
 	}
@@ -230,6 +258,7 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
+	mux.HandleFunc("GET /api/chirps", apiCfg.handleGetAllChirps)
 	mux.HandleFunc("POST /api/users", apiCfg.handleCreateUser)
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 
