@@ -130,6 +130,34 @@ func (cfg *apiConfig) handleGetAllChirps(w http.ResponseWriter, r *http.Request)
 	respondWithJSON(w, http.StatusOK, chirpsResponse)
 }
 
+func (cfg *apiConfig) handleGetChirpById(w http.ResponseWriter, r *http.Request) {
+	chirpIDString := r.PathValue("chirpID")
+
+	chirpID, err := uuid.Parse(chirpIDString)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid chirp ID")
+		return
+	}
+
+	chirp, err := cfg.DB.GetChirpByID(r.Context(), chirpID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			respondWithError(w, http.StatusNotFound, "Chirp not found")
+			return
+		}
+		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve chirp")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, Chirp{
+		ID: chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body: chirp.Body,
+		UserID: chirp.UserID,
+	})
+}
+
 
 func cleanProfanity(text string) string {
 	badWords := map[string]bool{
@@ -150,7 +178,7 @@ func cleanProfanity(text string) string {
 
 func  (cfg *apiConfig) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
-	
+
 	type parameters struct {
 		Email string `json:"email"`
 	}
@@ -258,6 +286,7 @@ func main() {
 	})
 
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerCreateChirp)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handleGetChirpById)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handleGetAllChirps)
 	mux.HandleFunc("POST /api/users", apiCfg.handleCreateUser)
 	mux.Handle("/app/", apiCfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
